@@ -6,6 +6,10 @@ from an RTMP stream which we connected to after it started. Say the stream's pla
 will wait 2 hours before emitting the first packet
 - after updating to membrane_core 0.11, we noticed that the realtimer was not ticking at the expected rate in wierd ways. We have not dedicated enough time to understand the issue, but using this code which does not provide the clock synchronization features that Membrane's Realtimer provides worked as expected.
 
+It also contains some neat features that are difficult to implement if not in the Realtimer:
+- delays: makes the realtimer emit stuff at the correct rate introducing a tunable delay
+- setting the "absolute time" manually: sets the timer's "t0". This might be used to start the timer at a deterministic point in time, overcoming variable pipeline latencies.
+
 This element is used in production.
 
 ## Installation
