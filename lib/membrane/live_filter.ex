@@ -84,9 +84,9 @@ defmodule Membrane.LiveFilter do
 
       {[demand: {:input, 1}], state}
     else
-      Membrane.Logger.debug(
-        "Scheduled buffer with pts #{Membrane.Time.pretty_duration(buffer.pts)} to be sent in #{Membrane.Time.pretty_duration(actual_interval)}"
-      )
+      # Membrane.Logger.debug(
+      #   "Scheduled buffer with pts #{Membrane.Time.pretty_duration(buffer.pts)} to be sent in #{Membrane.Time.pretty_duration(actual_interval)}"
+      # )
 
       Process.send_after(
         self(),
