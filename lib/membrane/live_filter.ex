@@ -88,10 +88,10 @@ defmodule Membrane.LiveFilter do
       )
 
       if !state.drop_late_buffers? do
-        send(self(), {:buffer, buffer})
+        {[buffer: {:output, buffer}, demand: {:input, 1}], state}
+      else
+        {[demand: {:input, 1}], state}
       end
-
-      {[demand: {:input, 1}], state}
     else
       # Membrane.Logger.debug(
       #   "Scheduled buffer with pts #{Membrane.Time.pretty_duration(buffer.pts)} to be sent in #{Membrane.Time.pretty_duration(actual_interval)}"
