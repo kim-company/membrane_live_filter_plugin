@@ -27,6 +27,11 @@ defmodule Membrane.LiveFilter do
       spec: Membrane.Time.t(),
       description: "Tunable sending delay, added to the safety delay",
       default: 0
+    ],
+    drop_late_buffers?: [
+      spec: boolean(),
+      description: "When enabled, the filter will drop late packets",
+      default: true
     ]
   )
 
@@ -38,6 +43,7 @@ defmodule Membrane.LiveFilter do
        playback: nil,
        safety_delay: opts.safety_delay,
        delay: opts.delay,
+       drop_late_buffers?: opts.drop_late_buffers?,
        timers: 0,
        closed: false
      }}
@@ -72,15 +78,18 @@ defmodule Membrane.LiveFilter do
     state = %{state | playback: buffer.pts, absolute_time: send_at}
 
     if actual_interval < 0 do
-      # This branch could be made optional. It could be preferred for other
-      # users to emit a burst of buffers instead of dropping them.
       Membrane.Logger.warn(
-        "Buffer dropped. It came #{Membrane.Time.pretty_duration(actual_interval)} too late.",
+        "Late buffer received. It came #{Membrane.Time.pretty_duration(actual_interval)} too late",
         %{
           interval: actual_interval,
-          pts: buffer.pts
+          pts: buffer.pts,
+          dropped: state.drop_late_buffers?
         }
       )
+
+      if !state.drop_late_buffers? do
+        send(self(), {:buffer, buffer})
+      end
 
       {[demand: {:input, 1}], state}
     else
