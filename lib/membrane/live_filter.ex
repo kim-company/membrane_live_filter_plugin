@@ -4,14 +4,16 @@ defmodule Membrane.LiveFilter do
   require Membrane.Logger
 
   def_input_pad(:input,
-    accepted_format: _,
-    availability: :always
+    accepted_format: _any,
+    availability: :always,
+    flow_control: :manual,
+    demand_unit: :buffers
   )
 
   def_output_pad(:output,
-    accepted_format: _,
+    accepted_format: _any,
     availability: :always,
-    mode: :push
+    flow_control: :push
   )
 
   def_options(
@@ -60,17 +62,17 @@ defmodule Membrane.LiveFilter do
   end
 
   @impl true
-  def handle_process(pad, buffer, ctx, state = %{playback: nil}) do
-    handle_process(pad, buffer, ctx, %{state | playback: buffer.pts - state.delay})
+  def handle_buffer(pad, buffer, ctx, state = %{playback: nil}) do
+    handle_buffer(pad, buffer, ctx, %{state | playback: buffer.pts - state.delay})
   end
 
-  def handle_process(pad, buffer, ctx, state = %{absolute_time: nil}) do
-    Membrane.Logger.warn("Absolute time was not set with start notification")
+  def handle_buffer(pad, buffer, ctx, state = %{absolute_time: nil}) do
+    Membrane.Logger.warning("Absolute time was not set with start notification")
     t = Membrane.Time.monotonic_time() + state.safety_delay
-    handle_process(pad, buffer, ctx, %{state | absolute_time: t})
+    handle_buffer(pad, buffer, ctx, %{state | absolute_time: t})
   end
 
-  def handle_process(_pad, buffer, _ctx, state) do
+  def handle_buffer(_pad, buffer, _ctx, state) do
     interval = buffer.pts - state.playback
     send_at = state.absolute_time + interval
     actual_interval = send_at - Membrane.Time.monotonic_time()
@@ -78,7 +80,7 @@ defmodule Membrane.LiveFilter do
     state = %{state | playback: buffer.pts, absolute_time: send_at}
 
     if actual_interval < 0 do
-      Membrane.Logger.warn(
+      Membrane.Logger.warning(
         "Late buffer received. It came #{Membrane.Time.pretty_duration(actual_interval)} too late",
         %{
           interval: actual_interval,

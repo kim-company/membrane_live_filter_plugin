@@ -2,8 +2,7 @@ defmodule Support.CollectableSink do
   use Membrane.Sink
 
   def_input_pad(:input,
-    accepted_format: _,
-    demand_mode: :auto,
+    accepted_format: _any,
     availability: :always
   )
 
@@ -13,7 +12,7 @@ defmodule Support.CollectableSink do
   end
 
   @impl true
-  def handle_write(_pad, buffer, _ctx, state) do
+  def handle_buffer(_pad, buffer, _ctx, state) do
     {[],
      update_in(state, [:acc], fn acc -> [%{time: DateTime.utc_now(), pts: buffer.pts} | acc] end)}
   end
@@ -35,7 +34,7 @@ defmodule Support.CollectableSink do
 
       %{time: time, pts: pts}, acc = [%{time: prev_time, pts: prev_pts} | _] ->
         actual_diff = DateTime.diff(time, prev_time, :millisecond)
-        expected_diff = Membrane.Time.round_to_milliseconds(pts - prev_pts)
+        expected_diff = Membrane.Time.as_milliseconds(pts - prev_pts, :round)
         delta = abs(actual_diff - expected_diff)
 
         [
