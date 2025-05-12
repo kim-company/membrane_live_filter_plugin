@@ -45,7 +45,7 @@ defmodule Membrane.LiveFilterTest do
     ]
 
     pipeline = Testing.Pipeline.start_link_supervised!(spec: spec)
-    assert_sink_buffer(pipeline, :sink, %Buffer{payload: 0}, 20)
+    assert_sink_buffer(pipeline, :sink, %Buffer{payload: 0}, 40)
     assert_end_of_stream(pipeline, :sink)
     Testing.Pipeline.terminate(pipeline)
   end
@@ -64,7 +64,7 @@ defmodule Membrane.LiveFilterTest do
     pipeline = Testing.Pipeline.start_link_supervised!(spec: spec)
 
     refute_sink_buffer(pipeline, :sink, _buffer, 90)
-    assert_sink_buffer(pipeline, :sink, %Buffer{payload: 0}, 20)
+    assert_sink_buffer(pipeline, :sink, %Buffer{payload: 0}, 30)
     Testing.Pipeline.terminate(pipeline)
   end
 

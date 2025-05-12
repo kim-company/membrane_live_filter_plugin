@@ -22,7 +22,7 @@ defmodule Membrane.LiveFilter.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:membrane_core, "~> 1.1.0"}
+      {:membrane_core, "~> 1.2"}
     ]
   end
 

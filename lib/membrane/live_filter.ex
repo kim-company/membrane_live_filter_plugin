@@ -1,13 +1,11 @@
 defmodule Membrane.LiveFilter do
-  use Membrane.Filter
+  use Membrane.Filter, flow_control_hints?: false
 
   require Membrane.Logger
 
   def_input_pad(:input,
     accepted_format: _any,
-    availability: :always,
-    flow_control: :manual,
-    demand_unit: :buffers
+    availability: :always
   )
 
   def_output_pad(:output,
@@ -21,7 +19,7 @@ defmodule Membrane.LiveFilter do
       spec: Membrane.Time.t(),
       description: """
         Safety buffer of time which increases the delay of the relay but ensures
-        that once it starts buffers are emitted at the expected pace
+        that once it starts buffers are emitted at the expected pace.
       """,
       default: Membrane.Time.milliseconds(5)
     ],
@@ -41,19 +39,17 @@ defmodule Membrane.LiveFilter do
   def handle_init(_ctx, opts) do
     {[],
      %{
-       absolute_time: nil,
-       playback: nil,
+       # options
        safety_delay: opts.safety_delay,
        delay: opts.delay,
        drop_late_buffers?: opts.drop_late_buffers?,
-       timers: 0,
-       closed: false
+       # runtime
+       absolute_time: nil,
+       playback: nil,
+       closed: false,
+       ref_to_buf: %{},
+       ref_to_timer: %{}
      }}
-  end
-
-  @impl true
-  def handle_playing(_ctx, state) do
-    {[demand: {:input, 1}], state}
   end
 
   @impl true
@@ -67,7 +63,7 @@ defmodule Membrane.LiveFilter do
   end
 
   def handle_buffer(pad, buffer, ctx, state = %{absolute_time: nil}) do
-    Membrane.Logger.warning("Absolute time was not set with start notification")
+    Membrane.Logger.debug("Absolute time was not set with start notification")
     t = Membrane.Time.monotonic_time() + state.safety_delay
     handle_buffer(pad, buffer, ctx, %{state | absolute_time: t})
   end
@@ -76,62 +72,80 @@ defmodule Membrane.LiveFilter do
     interval = buffer.pts - state.playback
     send_at = state.absolute_time + interval
     actual_interval = send_at - Membrane.Time.monotonic_time()
+    pretty_interval = Membrane.Time.pretty_duration(actual_interval)
 
-    state = %{state | playback: buffer.pts, absolute_time: send_at}
+    state =
+      state
+      |> put_in([:playback], buffer.pts)
+      |> put_in([:absolute_time], send_at)
 
-    if actual_interval < 0 do
-      Membrane.Logger.warning(
-        "Late buffer received. It came #{Membrane.Time.pretty_duration(actual_interval)} too late",
-        %{
-          interval: actual_interval,
-          pts: buffer.pts,
-          dropped: state.drop_late_buffers?
-        }
-      )
+    cond do
+      actual_interval < 0 and state.drop_late_buffers? ->
+        Membrane.Logger.warning(
+          "Late buffer received. It came #{pretty_interval} too late: dropping"
+        )
 
-      if !state.drop_late_buffers? do
-        {[buffer: {:output, buffer}, demand: {:input, 1}], state}
-      else
-        {[demand: {:input, 1}], state}
-      end
-    else
-      # Membrane.Logger.debug(
-      #   "Scheduled buffer with pts #{Membrane.Time.pretty_duration(buffer.pts)} to be sent in #{Membrane.Time.pretty_duration(actual_interval)}"
-      # )
+        {[], state}
 
-      Process.send_after(
-        self(),
-        {:buffer, buffer},
-        :erlang.convert_time_unit(send_at, :nanosecond, :millisecond),
-        abs: true
-      )
+      actual_interval < 0 ->
+        Membrane.Logger.warning(
+          "Late buffer received. It came #{pretty_interval} too late: forwarding immediately"
+        )
 
-      {[], update_in(state, [:timers], fn count -> count + 1 end)}
+        flush(buffer, state)
+
+      true ->
+        ref = make_ref()
+
+        timer_ref =
+          Process.send_after(
+            self(),
+            {:out, ref},
+            :erlang.convert_time_unit(send_at, :nanosecond, :millisecond),
+            abs: true
+          )
+
+        state =
+          state
+          |> put_in([:ref_to_buf, ref], buffer)
+          |> put_in([:ref_to_timer, ref], timer_ref)
+
+        {[], state}
     end
   end
 
   @impl true
   def handle_end_of_stream(_pad, _ctx, state) do
     state = %{state | closed: true}
-    actions = if state.timers <= 0, do: [end_of_stream: :output], else: []
+    actions = if map_size(state.ref_to_timer) == 0, do: [end_of_stream: :output], else: []
     {actions, state}
   end
 
   @impl true
-  def handle_info({:buffer, buffer}, _ctx, state) do
-    {count, state} =
-      get_and_update_in(state, [:timers], fn count ->
-        count = count - 1
-        {count, count}
-      end)
+  def handle_info({:out, ref}, _ctx, state) do
+    buf = Map.get(state.ref_to_buf, ref)
 
-    actions =
-      List.flatten([
-        [buffer: {:output, buffer}],
-        if(count == 0 and state.closed, do: [end_of_stream: :output], else: [demand: {:input, 1}])
-      ])
+    state =
+      state
+      |> update_in([:ref_to_buf], &Map.delete(&1, ref))
+      |> update_in([:ref_to_timer], &Map.delete(&1, ref))
 
-    {actions, state}
+    done? = state.closed and map_size(state.ref_to_timer) == 0
+
+    cond do
+      is_nil(buf) and done? ->
+        # Weird, but OK.
+        {[end_of_stream: :output], state}
+
+      is_nil(buf) ->
+        {[], state}
+
+      done? ->
+        {[buffer: {:output, buf}, end_of_stream: :output], state}
+
+      true ->
+        {[buffer: {:output, buf}], state}
+    end
   end
 
   @impl true
@@ -151,5 +165,27 @@ defmodule Membrane.LiveFilter do
       |> put_in([:delay], delay)
 
     {[], state}
+  end
+
+  defp flush(buffer, state) do
+    # First delete every timer
+    state.ref_to_timer
+    |> Enum.each(fn x -> Process.cancel_timer(x) end)
+
+    # Find every buffer
+    buffers =
+      state.ref_to_buf
+      |> Enum.map(fn {_ref, buffer} -> buffer end)
+      |> Enum.sort(fn left, right ->
+        Membrane.Buffer.get_dts_or_pts(left) < Membrane.Buffer.get_dts_or_pts(right)
+      end)
+
+    # Reset the state.
+    state =
+      state
+      |> put_in([:ref_to_buf], %{})
+      |> put_in([:ref_to_timer], %{})
+
+    {[buffer: {:output, buffers ++ [buffer]}], state}
   end
 end
