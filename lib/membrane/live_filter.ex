@@ -150,6 +150,7 @@ defmodule Membrane.LiveFilter do
 
   @impl true
   def handle_parent_notification(:start, _ctx, state) do
+    Membrane.Logger.debug("Start notification received")
     t = Membrane.Time.monotonic_time() + state.safety_delay
     {[], %{state | absolute_time: t}}
   end
