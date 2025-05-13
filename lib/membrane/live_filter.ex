@@ -170,7 +170,7 @@ defmodule Membrane.LiveFilter do
   defp flush(buffer, state) do
     # First delete every timer
     state.ref_to_timer
-    |> Enum.each(fn x -> Process.cancel_timer(x) end)
+    |> Enum.each(fn {_ref, x} -> Process.cancel_timer(x) end)
 
     # Find every buffer
     buffers =
