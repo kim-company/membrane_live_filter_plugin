@@ -72,7 +72,8 @@ defmodule Membrane.LiveFilter do
     interval = buffer.pts - state.playback
     send_at = state.absolute_time + interval
     actual_interval = send_at - Membrane.Time.monotonic_time()
-    pretty_interval = Membrane.Time.pretty_duration(actual_interval)
+
+    pretty_interval = "#{Float.round(-actual_interval / 1.0e9, 3)}s"
 
     state =
       state
@@ -81,16 +82,12 @@ defmodule Membrane.LiveFilter do
 
     cond do
       actual_interval < 0 and state.drop_late_buffers? ->
-        Membrane.Logger.warning(
-          "Late buffer received. It came #{pretty_interval} too late: dropping"
-        )
+        Membrane.Logger.warning("Late buffer received (#{pretty_interval}): dropping")
 
         {[], state}
 
       actual_interval < 0 ->
-        Membrane.Logger.warning(
-          "Late buffer received. It came #{pretty_interval} too late: forwarding immediately"
-        )
+        Membrane.Logger.warning("Late buffer received (#{pretty_interval}): forwarding")
 
         flush(buffer, state)
 
