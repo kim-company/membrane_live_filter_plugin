@@ -79,6 +79,12 @@ defmodule Membrane.LiveFilter do
 
     pretty_interval = "#{Float.round(-actual_interval / 1.0e9, 3)}s"
 
+    if send_at == state.absolute_time do
+      Membrane.Logger.warning(
+        "Buffer with same dts/pts value received: #{Buffer.get_dts_or_pts(buffer)}."
+      )
+    end
+
     state =
       state
       |> put_in([:playback], Buffer.get_dts_or_pts(buffer))
