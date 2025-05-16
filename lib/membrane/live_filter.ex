@@ -1,5 +1,6 @@
 defmodule Membrane.LiveFilter do
   use Membrane.Filter, flow_control_hints?: false
+  alias Membrane.Buffer
 
   require Membrane.Logger
 
@@ -59,7 +60,10 @@ defmodule Membrane.LiveFilter do
 
   @impl true
   def handle_buffer(pad, buffer, ctx, state = %{playback: nil}) do
-    handle_buffer(pad, buffer, ctx, %{state | playback: buffer.pts - state.delay})
+    handle_buffer(pad, buffer, ctx, %{
+      state
+      | playback: Buffer.get_dts_or_pts(buffer) - state.delay
+    })
   end
 
   def handle_buffer(pad, buffer, ctx, state = %{absolute_time: nil}) do
@@ -69,7 +73,7 @@ defmodule Membrane.LiveFilter do
   end
 
   def handle_buffer(_pad, buffer, _ctx, state) do
-    interval = buffer.pts - state.playback
+    interval = Buffer.get_dts_or_pts(buffer) - state.playback
     send_at = state.absolute_time + interval
     actual_interval = send_at - Membrane.Time.monotonic_time()
 
@@ -77,7 +81,7 @@ defmodule Membrane.LiveFilter do
 
     state =
       state
-      |> put_in([:playback], buffer.pts)
+      |> put_in([:playback], Buffer.get_dts_or_pts(buffer))
       |> put_in([:absolute_time], send_at)
 
     cond do
@@ -175,7 +179,7 @@ defmodule Membrane.LiveFilter do
       state.ref_to_buf
       |> Enum.map(fn {_ref, buffer} -> buffer end)
       |> Enum.sort(fn left, right ->
-        Membrane.Buffer.get_dts_or_pts(left) < Membrane.Buffer.get_dts_or_pts(right)
+        Buffer.get_dts_or_pts(left) < Buffer.get_dts_or_pts(right)
       end)
 
     # Reset the state.
