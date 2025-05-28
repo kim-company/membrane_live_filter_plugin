@@ -63,9 +63,8 @@ defmodule Membrane.LiveFilter do
   end
 
   def handle_buffer(pad, buffer, ctx, state = %{absolute_time: nil}) do
-    Membrane.Logger.debug("Absolute time was not set with start notification")
-    t = Membrane.Time.monotonic_time() + state.safety_delay
-    handle_buffer(pad, buffer, ctx, %{state | absolute_time: t})
+    Membrane.Logger.warning("Absolute time was not set with start notification")
+    handle_buffer(pad, buffer, ctx, set_absolute_time(state))
   end
 
   def handle_buffer(_pad, buffer, _ctx, state) do
@@ -146,10 +145,8 @@ defmodule Membrane.LiveFilter do
   end
 
   @impl true
-  def handle_parent_notification(:start, _ctx, state) do
-    Membrane.Logger.debug("Start notification received")
-    t = Membrane.Time.monotonic_time() + state.safety_delay
-    {[], %{state | absolute_time: t}}
+  def handle_parent_notification(:set_absolute_time, _ctx, state) do
+    {[], set_absolute_time(state)}
   end
 
   def handle_parent_notification({:delay, delay}, _ctx, state) do
@@ -163,6 +160,16 @@ defmodule Membrane.LiveFilter do
       |> put_in([:delay], delay)
 
     {[], state}
+  end
+
+  defp set_absolute_time(state) do
+    t = Membrane.Time.monotonic_time() + state.safety_delay
+
+    Membrane.Logger.info(
+      "Absolute time set. Emitting buffers in #{Float.round(state.safety_delay / 1.0e9, 3)}s"
+    )
+
+    %{state | absolute_time: t}
   end
 
   defp flush(buffer, state) do
