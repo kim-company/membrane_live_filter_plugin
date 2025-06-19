@@ -160,6 +160,8 @@ defmodule Membrane.LiveFilter do
   end
 
   def handle_parent_notification({:delay, delay}, _ctx, state) do
+    Membrane.Logger.info("Delay updated: #{state.delay} -> #{delay}")
+
     state =
       state
       |> update_in([:playback], fn
