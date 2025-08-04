@@ -67,7 +67,7 @@ defmodule Membrane.LiveFilter do
   end
 
   def handle_buffer(pad, buffer, ctx, state = %{absolute_time: nil}) do
-    Membrane.Logger.warning("Absolute time was not set with start notification")
+    Membrane.Logger.debug("Absolute time was not set with start notification")
     handle_buffer(pad, buffer, ctx, set_absolute_time(state))
   end
 
@@ -160,7 +160,7 @@ defmodule Membrane.LiveFilter do
   end
 
   def handle_parent_notification({:delay, delay}, _ctx, state) do
-    Membrane.Logger.info("Delay updated: #{state.delay} -> #{delay}")
+    Membrane.Logger.info("Delay updated: #{state.delay} -> #{inspect(delay)}")
 
     state =
       state
