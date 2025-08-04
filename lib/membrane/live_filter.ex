@@ -96,7 +96,7 @@ defmodule Membrane.LiveFilter do
         {[], state}
 
       actual_interval < 0 ->
-        Membrane.Logger.warning("Late buffer received (#{pretty_interval}): forwarding")
+        Membrane.Logger.debug("Late buffer received (#{pretty_interval}): forwarding")
 
         flush(buffer, state)
 
