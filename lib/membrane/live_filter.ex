@@ -155,6 +155,21 @@ defmodule Membrane.LiveFilter do
   end
 
   @impl true
+  def handle_parent_notification({:reset_deadline, nil}, _ctx, state) do
+    {[], set_absolute_time(state)}
+  end
+
+  def handle_parent_notification({:reset_deadline, downtime}, _ctx, state) do
+    delay =
+      if downtime < state.safety_delay do
+        downtime
+      else
+        state.safety_delay
+      end
+
+    {[], set_absolute_time(state, delay)}
+  end
+
   def handle_parent_notification(:set_absolute_time, _ctx, state) do
     {[], set_absolute_time(state)}
   end
@@ -175,10 +190,14 @@ defmodule Membrane.LiveFilter do
   end
 
   defp set_absolute_time(state) do
-    t = Membrane.Time.monotonic_time() + state.safety_delay
+    set_absolute_time(state, state.safety_delay)
+  end
+
+  defp set_absolute_time(state, delay) do
+    t = Membrane.Time.monotonic_time() + delay
 
     Membrane.Logger.info(
-      "Absolute time set. Emitting buffers in #{Float.round(state.safety_delay / 1.0e9, 3)}s"
+      "Absolute time set. Emitting buffers in #{Float.round(delay / 1.0e9, 3)}s"
     )
 
     %{state | absolute_time: t}
