@@ -41,6 +41,7 @@ defmodule Membrane.LiveFilter.MixProject do
     [
       maintainers: ["KIM Keep In Mind GmbH"],
       licenses: ["Apache-2.0"],
+
       links: %{"GitHub" => @github_url}
     ]
   end
